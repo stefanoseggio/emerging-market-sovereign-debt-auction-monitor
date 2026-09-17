@@ -1,6 +1,6 @@
 # Emerging-Market Sovereign Debt Auction Monitor — Brazil DPMFi
 
-[![Built for Apify](https://img.shields.io/badge/Built%20for-Apify-00C1A2?style=flat-square&logo=apify&logoColor=white)](https://apify.com)
+[![Built for Apify](https://img.shields.io/badge/Built%20for-Apify-00C1A2?style=flat-square&logo=apify&logoColor=white)](https://apify.com/stefano_seggio/emerging-market-sovereign-debt-auction-monitor)
 [![Pay-Per-Event](https://img.shields.io/badge/Pay--Per--Event-from%20%240.01%2Fevent-blue?style=flat-square)](https://apify.com/stefano_seggio/emerging-market-sovereign-debt-auction-monitor)
 [![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Apache 2.0 License](https://img.shields.io/badge/License-Apache%202.0-D22128?style=flat-square&logo=apache&logoColor=white)](./LICENSE)
