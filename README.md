@@ -1,10 +1,17 @@
 # Emerging-Market Sovereign Debt Auction Monitor — Brazil DPMFi
 
-![Node](https://img.shields.io/badge/node-%3E%3D20-brightgreen) ![License](https://img.shields.io/badge/license-MIT-blue) ![Tests](https://img.shields.io/badge/tests-112%20passing-brightgreen) ![Data source](https://img.shields.io/badge/data%20source-Tesouro%20Transparente%20ODbL-003469) ![Pricing](https://img.shields.io/badge/pricing-pay--per--event-orange)
+[![Built for Apify](https://img.shields.io/badge/Built%20for-Apify-00C1A2?style=flat-square&logo=apify&logoColor=white)](https://apify.com)
+[![Pay-Per-Event](https://img.shields.io/badge/Pay--Per--Event-from%20%240.01%2Fevent-blue?style=flat-square)](https://apify.com/stefano_seggio/emerging-market-sovereign-debt-auction-monitor)
+[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Apache 2.0 License](https://img.shields.io/badge/License-Apache%202.0-D22128?style=flat-square&logo=apache&logoColor=white)](./LICENSE)
 
-Delta-tracks Brazil's National Treasury domestic bond auction results (LTN, LFT, NTN-B, NTN-F)
-for new auctions, marginal-rate threshold breaches, and coverage-ratio anomalies. Sourced from
-the official **Tesouro Transparente** open-data portal (ODbL licensed), a real CKAN instance —
+[![Run on Apify Store](https://img.shields.io/badge/Run%20on-Apify%20Store-00C1A2?style=for-the-badge&logo=apify&logoColor=white)](https://apify.com/stefano_seggio/emerging-market-sovereign-debt-auction-monitor)
+
+Live and public at [apify.com/stefano_seggio/emerging-market-sovereign-debt-auction-monitor](https://apify.com/stefano_seggio/emerging-market-sovereign-debt-auction-monitor).
+
+**Delta-tracks Brazil's National Treasury domestic bond auction results (LTN, LFT, NTN-B, NTN-F) for new auctions, marginal-rate threshold breaches, and coverage-ratio anomalies.**
+
+Sourced from the official **Tesouro Transparente** open-data portal (ODbL licensed), a real CKAN instance —
 confirmed live through Sept 15, 2026, one day before this actor's build date. Part of
 [Delta Registry](https://github.com/stefanoseggio), a pay-per-event regulatory/compliance data
 fleet.
@@ -36,7 +43,7 @@ real source — not shipped on the first design that looked reasonable on paper:
    byte-identical file returned three *different* ETags. It's not a content signal on this
    server. Rather than ship a cache that silently never hits, this actor always downloads and
    parses every selected year; the zero-cost guarantee lives at the per-record fingerprint level
-   instead (see [ARCHITECTURE.md](ARCHITECTURE.md)).
+   instead (see [AGENTS.md](AGENTS.md)).
 
 ## Quickstart
 
@@ -102,6 +109,10 @@ a proposal. `apify-actor-start` is retained (the first 5 seconds of platform com
 every run) and `apify-default-dataset-item` is removed (no automatic per-write dataset charge), so
 the "unchanged auctions cost nothing" guarantee above is enforced at both the application layer
 and the Console billing layer.*
+
+**No third-party API key required.** BYOK status: **none**. This actor calls only the official
+Tesouro Transparente open-data portal (`tesourotransparente.gov.br` / `sisweb.tesouro.gov.br`) —
+there is no paid third-party API in the pipeline, and no key of any kind for you to supply.
 
 ## Input reference
 
@@ -196,7 +207,7 @@ adjust your flow's parsing step to this actor's payload if needed (documented in
 
 ## Architecture
 
-Full spec in [ARCHITECTURE.md](ARCHITECTURE.md). Summary:
+Full spec in [AGENTS.md](AGENTS.md). Summary:
 
 ```
   Actor input ──▶ src/main.ts (migrating/aborting-safe state flush,
@@ -241,39 +252,41 @@ npm test
 
 112 real, passing tests across eight files:
 
-- [`tests/quantEngine.test.ts`](tests/quantEngine.test.ts) — unit and **property-based** (via
+- [`test/quantEngine.test.ts`](test/quantEngine.test.ts) — unit and **property-based** (via
   `fast-check`) tests for basis-point conversion, coverage ratio, and threshold breach detection,
   including linearity, monotonicity, homogeneity, and antitonicity properties checked across
   generated input ranges, not just hand-picked examples.
-- [`tests/deltaEngine.test.ts`](tests/deltaEngine.test.ts) — canonicalization, SHA-256 fingerprint
+- [`test/deltaEngine.test.ts`](test/deltaEngine.test.ts) — canonicalization, SHA-256 fingerprint
   behavior, Excel-serial-to-date conversion against real observed values, and the full
   classify/shouldDeliver state machine, including a regression test for the real `auctionType`
   collision found live.
-- [`tests/dataSource.test.ts`](tests/dataSource.test.ts) — real XLSX parsing (via an in-memory
+- [`test/dataSource.test.ts`](test/dataSource.test.ts) — real XLSX parsing (via an in-memory
   workbook built with the same `xlsx` library, matching the source's confirmed live layout), HTTP
   retry/backoff/timeout (including a genuine network-level rejection, not just a bad-status
   response), 404 handling, non-retryable-4xx handling, and per-year file-extension resolution.
-- [`tests/notifier.test.ts`](tests/notifier.test.ts) — payload-shape and escaping tests for all
+- [`test/notifier.test.ts`](test/notifier.test.ts) — payload-shape and escaping tests for all
   three channels.
-- [`tests/state.test.ts`](tests/state.test.ts) — Key-Value Store round-tripping for both
+- [`test/state.test.ts`](test/state.test.ts) — Key-Value Store round-tripping for both
   independently-managed keys (`STATE` and `BENCHMARK_RATES`) within the shared state store.
-- [`tests/routes.test.ts`](tests/routes.test.ts) — unit tests for the pure per-row logic.
-- [`tests/integration.test.ts`](tests/integration.test.ts) — a full multi-run auction lifecycle
+- [`test/routes.test.ts`](test/routes.test.ts) — unit tests for the pure per-row logic.
+- [`test/integration.test.ts`](test/integration.test.ts) — a full multi-run auction lifecycle
   simulation (baseline → unchanged → a real government data revision below threshold → a new
   auction and a threshold-breaching revision in the same run) verifying every delta trigger fires
   correctly, plus regression tests for maxItems-truncation safety, multi-year independence,
   per-year failure isolation, the `eventChargeLimitReached` stop condition, delivery-filtered rows
   still being tracked in state, and the not-yet-published-year (404) branch.
-- [`tests/main.test.ts`](tests/main.test.ts) — shutdown-safety wiring: the `migrating`/`aborting`
+- [`test/main.test.ts`](test/main.test.ts) — shutdown-safety wiring: the `migrating`/`aborting`
   handlers actually flush both state stores when invoked, a flush failure never crashes the
   shutdown path, state is saved even when `run()` fails, and `Actor.exit()` is correctly never
   called on that failure path.
 
 ## CI/CD
 
-[`.github/workflows/deploy.yml`](.github/workflows/deploy.yml): every push and pull request runs
-lint, type-check/build, and the full test suite; a push to `main` that passes all three then
-deploys via the Apify CLI using an `APIFY_TOKEN` repository secret.
+[`.github/workflows/test.yaml`](.github/workflows/test.yaml): every push and pull request runs
+lint, type-check/build, and the full test suite — a public quality signal, not a deploy pipeline.
+Deployment to Apify is manual (`apify login --token` + `apify push`), matching how every actor
+across this developer's portfolio is actually shipped; see
+[`docs/GITHUB_REMOTE_SETUP.md`](docs/GITHUB_REMOTE_SETUP.md) for detail.
 
 ## What this actor deliberately does not do
 
@@ -282,7 +295,7 @@ deploys via the Apify CLI using an `APIFY_TOKEN` repository secret.
 - **No forward-looking auction calendar** — Brazil's real quarterly auction calendar is a PDF
   press release, not a structured feed; mixing unreliable PDF-scraping into a "zero-defect,
   financial-grade" actor would undermine the actual reliability guarantee. See
-  [ARCHITECTURE.md §3](ARCHITECTURE.md#3-three-mandate-assumptions-corrected-against-this-real-source).
+  [AGENTS.md §3](AGENTS.md#3-three-mandate-assumptions-corrected-against-this-real-source).
 - **No file-level change-avoidance** — this server's ETag isn't a real content signal (see
   above); every run fully downloads and parses every selected year.
 - **No classic Microsoft Teams connector support** — retired, see **Alerting** above.

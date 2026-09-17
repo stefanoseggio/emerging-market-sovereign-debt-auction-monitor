@@ -7,7 +7,7 @@ export default [
     ...apifyConfig,
     prettierConfig,
     {
-        files: ['src/**/*.ts', 'tests/**/*.ts'],
+        files: ['src/**/*.ts', 'test/**/*.ts'],
         languageOptions: {
             parserOptions: {
                 project: './tsconfig.eslint.json',
@@ -24,7 +24,7 @@ export default [
         },
     },
     {
-        files: ['tests/**/*.ts'],
+        files: ['test/**/*.ts'],
         rules: {
             '@typescript-eslint/no-non-null-assertion': 'off',
         },
@@ -33,6 +33,16 @@ export default [
         files: ['eslint.config.mjs'],
         rules: {
             'import-x/no-default-export': 'off',
+        },
+    },
+    {
+        // Standalone usage examples, not part of the shipped actor: console output is the
+        // point, and `apify-client` is an intentional peer dependency for whoever copies the
+        // snippet, not a real dependency of this actor.
+        files: ['examples/**'],
+        rules: {
+            'no-console': 'off',
+            'import-x/no-extraneous-dependencies': 'off',
         },
     },
 ];

@@ -34,5 +34,29 @@
         "test": "vitest run"
     },
     "author": "Stefano",
-    "license": "Apache-2.0"
+    "license": "Apache-2.0",
+    "keywords": [
+        "apify",
+        "actor",
+        "brazil treasury",
+        "tesouro nacional",
+        "tesouro transparente",
+        "sovereign debt",
+        "emerging market debt",
+        "bond auction monitor",
+        "ltn",
+        "lft",
+        "ntn-b",
+        "ntn-f",
+        "fixed income",
+        "yield alert",
+        "quant data",
+        "delta",
+        "b2b data"
+    ],
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/stefanoseggio/emerging-market-sovereign-debt-auction-monitor.git"
+    },
+    "homepage": "https://apify.com/stefano_seggio/emerging-market-sovereign-debt-auction-monitor"
 }

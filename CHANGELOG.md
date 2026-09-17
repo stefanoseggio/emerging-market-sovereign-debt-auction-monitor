@@ -12,4 +12,4 @@ Initial release.
 - Quantitative threshold alerting on marginal-rate moves and coverage-ratio anomalies.
 - Multi-channel alerting: generic webhook, Slack (Block Kit), Microsoft Teams (Adaptive Card via
   Workflows).
-- 99 automated tests (unit, property-based, and integration) across seven test files.
+- 112 automated tests (unit, property-based, and integration) across eight test files.

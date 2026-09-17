@@ -1,9 +1,9 @@
-# Delta Engine v2 — Emerging-Market Sovereign Debt & Bond Auction Monitor
+# AGENTS.md - Emerging-Market Sovereign Debt Auction Monitor
 
-Status: authored 2026-09-16, applying the fleet reference architecture established in Actor #1
-(TED) and Actor #2 (UK Modern Slavery Registry) to a third, genuinely different real data-access
-mechanism. Every claim below was verified against the live source, not assumed from the mandate's
-framing.
+Technical notes for whoever (human or AI) touches this actor next. Authored 2026-09-16, applying
+the fleet reference architecture established in Actor #1 (TED) and Actor #2 (UK Modern Slavery
+Registry) to a third, genuinely different real data-access mechanism. Every claim below was
+verified against the live source, not assumed from the mandate's framing.
 
 ## 0. The real data source — verified live, not the mandate's generic framing
 
@@ -251,4 +251,4 @@ all pure numeric functions with a large, well-defined input domain (any real rat
 any positive integer serial; any two positive quantities) — exactly the case property-based
 testing is suited for, rather than a handful of hand-picked examples. This actor uses `fast-check`
 (the standard TypeScript/JavaScript property-based testing library, integrating directly with
-Vitest) for `tests/quantEngine.test.ts`'s numeric-precision tests, not renamed unit tests.
+Vitest) for `test/quantEngine.test.ts`'s numeric-precision tests, not renamed unit tests.

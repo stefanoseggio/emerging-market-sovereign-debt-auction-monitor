@@ -6,7 +6,7 @@
         "years": {
             "title": "Registry years to check",
             "type": "array",
-            "description": "Which registry years of Brazil's National Treasury domestic auction results to check this run. The source publishes one full XLSX file per year (2000-2026 confirmed live at authoring time; 2027 is listed for when it becomes real). Each run fully downloads AND parses every selected year's file - this source has no HEAD/Range support and its ETag header was found to change on every request regardless of content (confirmed live), so there is no cheap way to skip an unchanged year at the file level; the per-record content fingerprint is what avoids re-billing unchanged auctions instead (see ARCHITECTURE.md section 1). Files are small (58-85 KB), so this is fast in practice. Defaults to the current year only to keep a first/default run fast.",
+            "description": "Which registry years of Brazil's National Treasury domestic auction results to check this run. The source publishes one full XLSX file per year (2000-2026 confirmed live at authoring time; 2027 is listed for when it becomes real). Each run fully downloads AND parses every selected year's file - this source has no HEAD/Range support and its ETag header was found to change on every request regardless of content (confirmed live), so there is no cheap way to skip an unchanged year at the file level; the per-record content fingerprint is what avoids re-billing unchanged auctions instead (see AGENTS.md section 1). Files are small (58-85 KB), so this is fast in practice. Defaults to the current year only to keep a first/default run fast.",
             "editor": "select",
             "items": {
                 "type": "string",
@@ -46,7 +46,7 @@
         "coverageRatioFloor": {
             "title": "Coverage ratio alert floor",
             "type": "number",
-            "description": "Fires a notification when an auction's coverage ratio (Quantity Accepted / Quantity Tendered - NOT a true bid-to-cover ratio, since this source does not publish total market demand; see ARCHITECTURE.md section 3) falls at or below this fraction, signalling weak demand relative to the offered supply. Set to 0 to disable this specific alert.",
+            "description": "Fires a notification when an auction's coverage ratio (Quantity Accepted / Quantity Tendered - NOT a true bid-to-cover ratio, since this source does not publish total market demand; see AGENTS.md section 3) falls at or below this fraction, signalling weak demand relative to the offered supply. Set to 0 to disable this specific alert.",
             "minimum": 0,
             "maximum": 1,
             "default": 0.5
