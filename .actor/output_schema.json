@@ -1,0 +1,11 @@
+{
+    "actorOutputSchemaVersion": 1,
+    "title": "Output schema of the Actor",
+    "properties": {
+        "auctionEvents": {
+            "type": "string",
+            "title": "Delta events (new/revised bond auctions)",
+            "template": "{{links.apiDefaultDatasetUrl}}/items"
+        }
+    }
+}

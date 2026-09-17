@@ -1,0 +1,9 @@
+node_modules
+dist
+apify_storage
+storage
+.DS_Store
+*.log
+.env
+*.tsbuildinfo
+coverage

@@ -1,0 +1,100 @@
+{
+    "title": "Emerging-Market Sovereign Debt Auction Monitor - Brazil DPMFi",
+    "type": "object",
+    "schemaVersion": 1,
+    "properties": {
+        "years": {
+            "title": "Registry years to check",
+            "type": "array",
+            "description": "Which registry years of Brazil's National Treasury domestic auction results to check this run. The source publishes one full XLSX file per year (2000-2026 confirmed live at authoring time; 2027 is listed for when it becomes real). Each run fully downloads AND parses every selected year's file - this source has no HEAD/Range support and its ETag header was found to change on every request regardless of content (confirmed live), so there is no cheap way to skip an unchanged year at the file level; the per-record content fingerprint is what avoids re-billing unchanged auctions instead (see ARCHITECTURE.md section 1). Files are small (58-85 KB), so this is fast in practice. Defaults to the current year only to keep a first/default run fast.",
+            "editor": "select",
+            "items": {
+                "type": "string",
+                "enum": ["2000", "2001", "2002", "2003", "2004", "2005", "2006", "2007", "2008", "2009", "2010", "2011", "2012", "2013", "2014", "2015", "2016", "2017", "2018", "2019", "2020", "2021", "2022", "2023", "2024", "2025", "2026", "2027"]
+            },
+            "default": ["2026"]
+        },
+        "bondTypeFilter": {
+            "title": "Bond type filter (optional)",
+            "type": "array",
+            "description": "Deliver only auctions for these bond types - the real, currently-issued instrument types confirmed live: LTN (zero-coupon, fixed rate), LFT (floating rate, Selic-indexed), NTN-B (inflation-linked, IPCA-indexed), NTN-F (fixed rate, semi-annual coupon). Leave empty to deliver all types. This is a client-side filter applied after parsing (the source's bulk file has no server-side query mechanism), so it does not reduce download size, only which normalized auctions are delivered.",
+            "editor": "select",
+            "items": {
+                "type": "string",
+                "enum": ["LTN", "LFT", "NTN-B", "NTN-F"]
+            },
+            "default": []
+        },
+        "auctionTypeFilter": {
+            "title": "Auction type filter (optional)",
+            "type": "array",
+            "description": "Deliver only these auction types - the real, documented values from the source's own legend: Venda (Sale), Troca (Exchange), Compra (Purchase), Extra Compra (Extraordinary Purchase), Extra Venda (Extraordinary Sale). Leave empty to deliver all types.",
+            "editor": "select",
+            "items": {
+                "type": "string",
+                "enum": ["Venda", "Troca", "Compra", "Extra Compra", "Extra Venda"]
+            },
+            "default": []
+        },
+        "yieldChangeThresholdBps": {
+            "title": "Marginal rate change alert threshold (basis points)",
+            "type": "integer",
+            "description": "Fires a notification (webhook/Slack/Teams - does not affect what's pushed to the dataset, only what's flagged as a high-value alert) when a bond type + benchmark's accepted (marginal/cutoff) rate moves by at least this many basis points versus its own last observed value. A real NEW_AUCTION always alerts regardless of this threshold, since there is no 'previous value' to compare against. Set to 0 to alert on any nonzero rate change for an AUCTION_RESULT_REVISED event.",
+            "minimum": 0,
+            "default": 10
+        },
+        "coverageRatioFloor": {
+            "title": "Coverage ratio alert floor",
+            "type": "number",
+            "description": "Fires a notification when an auction's coverage ratio (Quantity Accepted / Quantity Tendered - NOT a true bid-to-cover ratio, since this source does not publish total market demand; see ARCHITECTURE.md section 3) falls at or below this fraction, signalling weak demand relative to the offered supply. Set to 0 to disable this specific alert.",
+            "minimum": 0,
+            "maximum": 1,
+            "default": 0.5
+        },
+        "maxItems": {
+            "title": "Max records to push this run",
+            "type": "integer",
+            "description": "Stops the run once this many changed/new auction records have been pushed (and charged, where applicable) across all selected years - this actor's own safety valve. Records not yet reached when the limit is hit are simply re-evaluated fresh next run. Defaults to 50 so a default/test run completes in well under Apify's automated-test window.",
+            "minimum": 1,
+            "default": 50
+        },
+        "deltaStateName": {
+            "title": "Delta state name",
+            "type": "string",
+            "description": "Names the persistent Key-Value Store this run's delta memory (per-auction fingerprints, per-year baseline-completion flags, and per-instrument last-observed rate for threshold comparisons, tracked by bond type + auction type + maturity date) lives in. Use a distinct name per independent schedule/filter configuration. Leave as 'default' for a single schedule.",
+            "editor": "textfield",
+            "default": "default"
+        },
+        "resetState": {
+            "title": "Reset delta state",
+            "type": "boolean",
+            "description": "When true, ignores all previously-remembered auctions, per-year baseline-completion flags, and per-instrument rate history for this deltaStateName and re-baselines from scratch. Use only to deliberately restart monitoring.",
+            "default": false
+        },
+        "onlyNew": {
+            "title": "Deliver only new/changed auctions",
+            "type": "boolean",
+            "description": "When true (recommended, and the only free-of-charge default), only NEW_AUCTION and AUCTION_RESULT_REVISED events are delivered - never a snapshot of an unchanged auction or a first-run baseline. When false, every matched auction is delivered every run its year is processed, including BASELINE_SNAPSHOT (first run) and AUCTION_UNCHANGED rows.",
+            "default": true
+        },
+        "webhookUrl": {
+            "title": "Generic webhook URL (optional)",
+            "type": "string",
+            "description": "Any HTTPS endpoint that accepts a JSON POST - receives the full raw event payload with no channel-specific formatting. Independent of Apify's own platform-level webhook system.",
+            "editor": "textfield"
+        },
+        "slackWebhookUrl": {
+            "title": "Slack Incoming Webhook URL (optional)",
+            "type": "string",
+            "description": "A Slack Incoming Webhook URL created via a Slack App (Slack's current, supported method - not the older 'legacy custom integrations' path). Receives a formatted Slack Block Kit message highlighting the marginal-rate change and coverage ratio on a threshold breach.",
+            "editor": "textfield"
+        },
+        "teamsWebhookUrl": {
+            "title": "Microsoft Teams webhook URL (optional)",
+            "type": "string",
+            "description": "A Microsoft Teams 'Workflows' webhook URL (the current mechanism as of 2026 - NOT the retired classic Incoming Webhook connector; see README). Receives a formatted Adaptive Card highlighting the same yield/coverage signal as the Slack alert.",
+            "editor": "textfield"
+        }
+    },
+    "required": []
+}

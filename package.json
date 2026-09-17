@@ -1,0 +1,38 @@
+{
+    "name": "emerging-market-sovereign-debt-auction-monitor",
+    "version": "1.0.0",
+    "type": "module",
+    "description": "Emerging-Market Sovereign Debt & Bond Auction Delta Monitor: tracks Brazil's National Treasury domestic bond auction results for new auctions, marginal-rate threshold breaches, and coverage-ratio anomalies, sourced from the official Tesouro Transparente open-data portal, pay-per-event.",
+    "engines": { "node": ">=20.0.0" },
+    "dependencies": {
+        "apify": "^3.7.0",
+        "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+    },
+    "devDependencies": {
+        "@apify/eslint-config": "^2.0.0",
+        "@apify/tsconfig": "^0.2.0",
+        "@types/node": "^24.0.0",
+        "eslint": "^9.29.0",
+        "eslint-config-prettier": "^10.1.5",
+        "fast-check": "^3.23.1",
+        "globals": "^17.0.0",
+        "prettier": "^3.5.3",
+        "tsx": "^4.20.3",
+        "typescript": "^6.0.0",
+        "typescript-eslint": "^8.58.0",
+        "vitest": "^4.1.0"
+    },
+    "scripts": {
+        "start": "node dist/main.js",
+        "start:prod": "node dist/main.js",
+        "start:dev": "tsx src/main.ts",
+        "build": "tsc",
+        "lint": "eslint",
+        "lint:fix": "eslint --fix",
+        "format": "prettier --write .",
+        "format:check": "prettier --check .",
+        "test": "vitest run"
+    },
+    "author": "Stefano",
+    "license": "MIT"
+}

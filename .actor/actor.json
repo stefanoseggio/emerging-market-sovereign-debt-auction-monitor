@@ -1,0 +1,18 @@
+{
+    "$schema": "https://apify.com/schemas/v1/actor.ide.json",
+    "actorSpecification": 1,
+    "name": "emerging-market-sovereign-debt-auction-monitor",
+    "title": "Emerging-Market Sovereign Debt Auction Monitor - Brazil DPMFi",
+    "description": "Delta-tracks Brazil's National Treasury domestic bond auction results (LTN, LFT, NTN-B, NTN-F) for new auctions, marginal-rate threshold breaches, and coverage-ratio anomalies. Sourced from the official Tesouro Transparente open-data portal. Financial-grade basis-point precision. Pay-per-event.",
+    "version": "1.0",
+    "buildTag": "latest",
+    "minMemoryMbytes": 512,
+    "maxMemoryMbytes": 2048,
+    "meta": { "templateId": "ts-apify-only", "generatedBy": "Claude Code with Claude Sonnet 5" },
+    "inputSchema": "./input_schema.json",
+    "storages": { "dataset": "./dataset_schema.json" },
+    "output": "./output_schema.json",
+    "changelog": "../CHANGELOG.md",
+    "dockerfile": "../Dockerfile",
+    "categories": ["BUSINESS"]
+}

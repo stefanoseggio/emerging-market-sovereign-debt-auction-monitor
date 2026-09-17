@@ -1,0 +1,48 @@
+{
+    "actorSpecification": 1,
+    "fields": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "required": ["event_type", "record_id", "auction_date", "bond_type", "scraped_at"],
+        "properties": {
+            "@type": { "type": "string", "enum": ["schema:FinancialProduct"] },
+            "event_id": { "type": "string" },
+            "event_type": { "type": "string", "enum": ["NEW_AUCTION", "AUCTION_RESULT_REVISED", "AUCTION_UNCHANGED", "BASELINE_SNAPSHOT"] },
+            "record_id": { "type": "string" },
+            "auction_date": { "type": "string" },
+            "bond_type": { "type": "string" },
+            "auction_type": { "type": ["string", "null"] },
+            "round": { "type": ["string", "null"] },
+            "settlement_date": { "type": ["string", "null"] },
+            "maturity_date": { "type": ["string", "null"] },
+            "benchmark": { "type": ["string", "null"] },
+            "quantity_offered": { "type": ["number", "null"] },
+            "quantity_accepted": { "type": ["number", "null"] },
+            "coverage_ratio": { "type": ["number", "null"] },
+            "average_rate_decimal": { "type": ["number", "null"] },
+            "average_rate_bps": { "type": ["integer", "null"] },
+            "accepted_rate_decimal": { "type": ["number", "null"] },
+            "accepted_rate_bps": { "type": ["integer", "null"] },
+            "rate_change_bps": { "type": ["integer", "null"] },
+            "total_amount_accepted": { "type": ["number", "null"] },
+            "total_amount_accepted_currency": { "type": "string" },
+            "quantity_to_central_bank": { "type": ["number", "null"] },
+            "total_amount_to_central_bank": { "type": ["number", "null"] },
+            "yield_threshold_breached": { "type": "boolean" },
+            "coverage_threshold_breached": { "type": "boolean" },
+            "status_fingerprint": { "type": "string" },
+            "content_fingerprint": { "type": "string" },
+            "is_new": { "type": "boolean" },
+            "scraped_at": { "type": "string" }
+        }
+    },
+    "views": {
+        "overview": {
+            "title": "Overview",
+            "transformation": {
+                "fields": ["event_type", "auction_date", "bond_type", "benchmark", "accepted_rate_decimal", "rate_change_bps", "coverage_ratio", "yield_threshold_breached", "scraped_at"]
+            },
+            "display": { "component": "table" }
+        }
+    }
+}

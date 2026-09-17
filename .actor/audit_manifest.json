@@ -1,0 +1,37 @@
+{
+  "actorName": "Emerging-Market Sovereign Debt Auction Monitor — Brazil DPMFi",
+  "actorId": "V3i5xKy1kf7vL0Rue",
+  "slug": "stefano_seggio/emerging-market-sovereign-debt-auction-monitor",
+  "storeUrl": "https://apify.com/stefano_seggio/emerging-market-sovereign-debt-auction-monitor",
+  "repoAssembledFrom": "infrastructure/flagship_sovereign_debt_actor",
+  "repoAssembledDate": "2026-09-17",
+  "published": true,
+  "buildNumberAtRepoAssembly": "1.0.3",
+  "ppeConfig": {
+    "apifyActorStartRetained": true,
+    "apifyDefaultDatasetItemRemoved": true,
+    "customEvents": [
+      { "name": "new-auction", "price": 0.02 },
+      { "name": "auction-result-revised", "price": 0.01 }
+    ],
+    "verifiedAgainstConsole": true,
+    "verifiedAgainstReadme": true
+  },
+  "testCoverage": {
+    "hasTests": true,
+    "testCount": 112,
+    "testFiles": 8
+  },
+  "qualifyingRunResult": {
+    "outcome": "SUCCEEDED, 0 records pushed",
+    "explanation": "716 real auction rows parsed and correctly classified as BASELINE_SNAPSHOT on this genuine first run; suppressed from delivery because 'onlyNew' defaults to true (free-of-charge baseline suppression is designed behavior, not a defect)",
+    "publishGateFinding": "This run empirically proved Apify's publish gate requires only a SUCCEEDED run status, not a non-empty dataset."
+  },
+  "knownRisks": [
+    "Health-check cadence assumption unverified: whether future daily default runs will regularly find genuine new activity depends on Brazil's National Treasury's real auction frequency, which was not independently confirmed against a live auction calendar this audit"
+  ],
+  "constraintCompliance": {
+    "inviolableConstraint": "Core extraction/classification logic (src/deltaEngine.ts) and PPE pricing were not altered during this repo assembly.",
+    "verificationMethod": "No code changes were made to this actor in the audit that produced this manifest; file contents copied verbatim from the live production source"
+  }
+}
