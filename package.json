@@ -34,5 +34,5 @@
         "test": "vitest run"
     },
     "author": "Stefano",
-    "license": "MIT"
+    "license": "Apache-2.0"
 }
