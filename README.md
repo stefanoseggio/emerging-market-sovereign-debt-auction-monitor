@@ -95,6 +95,71 @@ const { items } = await client.dataset(run.defaultDatasetId).listItems();
 items.forEach((item) => console.log(`${item.event_type}: ${item.bond_type} ${item.benchmark} - ${(item.accepted_rate_decimal * 100).toFixed(4)}% (${item.rate_change_bps} bps)`));
 ```
 
+## Use this from Claude Desktop, Cursor, or Windsurf (via MCP)
+
+This actor is also reachable as a tool through Apify's own hosted `@apify/actors-mcp-server` at `https://mcp.apify.com`, scoped to just this one actor via a `?tools=stefano_seggio/emerging-market-sovereign-debt-auction-monitor` query string — it is not a separate "Delta Registry MCP server," and each config below connects an MCP client to this single actor, not the wider fleet. Get a token from [Apify Console → Settings → Integrations](https://console.apify.com/settings/integrations) first.
+
+### Claude Desktop
+
+Edit `%APPDATA%\Claude\claude_desktop_config.json` on Windows (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS). Claude Desktop connects via the `mcp-remote` stdio bridge, not a direct URL:
+
+```json
+{
+  "mcpServers": {
+    "delta-registry-emerging-market-sovereign-debt-auction-monitor": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote",
+        "https://mcp.apify.com/?tools=stefano_seggio/emerging-market-sovereign-debt-auction-monitor",
+        "--header",
+        "Authorization: Bearer ${APIFY_TOKEN}"
+      ]
+    }
+  }
+}
+```
+
+`mcp-remote` does not expand shell environment variables inside the JSON string — paste your real token literally in place of `${APIFY_TOKEN}`, and keep this file out of version control.
+
+### Cursor
+
+Edit `.cursor/mcp.json` (project-scoped) or `~/.cursor/mcp.json` (global). Cursor uses native HTTP transport:
+
+```json
+{
+  "mcpServers": {
+    "delta-registry-emerging-market-sovereign-debt-auction-monitor": {
+      "url": "https://mcp.apify.com/?tools=stefano_seggio/emerging-market-sovereign-debt-auction-monitor",
+      "headers": {
+        "Authorization": "Bearer ${APIFY_TOKEN}"
+      }
+    }
+  }
+}
+```
+
+### Windsurf
+
+Edit `~/.codeium/windsurf/mcp_config.json`. Windsurf uses `serverUrl`, not `url`:
+
+```json
+{
+  "mcpServers": {
+    "delta-registry-emerging-market-sovereign-debt-auction-monitor": {
+      "serverUrl": "https://mcp.apify.com/?tools=stefano_seggio/emerging-market-sovereign-debt-auction-monitor",
+      "headers": {
+        "Authorization": "Bearer ${env:APIFY_TOKEN}"
+      }
+    }
+  }
+}
+```
+
+Windsurf's `${env:...}` syntax genuinely resolves from your environment at runtime, unlike `mcp-remote` above.
+
+Want every Delta Registry actor (all 28) reachable from one closed-scope MCP config instead of connecting to each actor individually? See [`delta-registry-website/MCP_INTEGRATION.md`](https://github.com/stefanoseggio/delta-registry-website/blob/main/MCP_INTEGRATION.md).
+
 ## Pricing (pay-per-event)
 
 | Event | Price | When it fires |
