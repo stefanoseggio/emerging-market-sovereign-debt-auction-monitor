@@ -15,7 +15,41 @@ const USER_AGENT = 'DeltaRegistrySovereignDebtMonitor/1.0 (+https://apify.com/st
 const MAX_RETRY_ATTEMPTS = 5;
 const BASE_BACKOFF_MS = 1000;
 const MAX_BACKOFF_MS = 30_000;
-const REQUEST_TIMEOUT_MS = 60_000;
+/**
+ * Confirmed timeout-budget bug (2026-09-19 audit): this Actor's `.actor/actor.json` real, live
+ * `defaultRunOptions.timeoutSecs` is 300s. With the previous value here (60_000ms), a single
+ * `fetchWithRetry` call's own worst case already exceeded that whole run budget on nothing but the
+ * DEFAULT input (`years: ["2026"]`, one file) - not a large-N edge case, the ordinary default run:
+ *
+ *   worst case = MAX_RETRY_ATTEMPTS x REQUEST_TIMEOUT_MS + sum of the 4 inter-attempt backoff
+ *                delays (each up to BASE_BACKOFF_MS x 2^attempt, capped at MAX_BACKOFF_MS, plus
+ *                up to 30% jitter - see backoffDelay())
+ *              = 5 x 60_000ms + (1_300 + 2_600 + 5_200 + 10_400)ms
+ *              = 300_000ms + 19_500ms = 319_500ms (~319.5s) > 300s timeoutSecs
+ *
+ * i.e. a single stalled/erroring download of this actor's own ~58-85 KB file (see
+ * fetchYearAuctions's doc comment) could by itself exhaust the entire run's timeout budget before
+ * a single row is ever parsed, even for a one-year run. This was the retry ceiling at this call
+ * site being oversized relative to timeoutSecs, not an unbounded input - `years` is a small,
+ * enum-constrained field and the default is already the smallest possible workload (one year).
+ *
+ * Fix: tighten REQUEST_TIMEOUT_MS, not MAX_RETRY_ATTEMPTS/backoff - the 60s-per-attempt stall
+ * timeout was far more generous than this tiny file ever needs (58-85 KB - full transfer normally
+ * completes in a few seconds even over a slow, high-latency government-server connection), and
+ * cutting it does not reduce how many genuine retries a transient 5xx/429/network failure gets.
+ * New worst case with all 5 retries still available:
+ *
+ *   worst case = 5 x 30_000ms + 19_500ms = 150_000ms + 19_500ms = 169_500ms (~169.5s)
+ *              = ~56.5% of the real 300s timeoutSecs budget - genuine margin left over for XLSX
+ *                parsing and row processing on the default (one-year) run.
+ *
+ * Note: a user-selected multi-year run (`years` can hold more than one of the 28 enum values) still
+ * calls this once per year, sequentially (see routes.ts's run()/processYear()), so a run covering
+ * several years compounds this same per-call worst case linearly. That is a real, separate
+ * multi-year headroom question about the Actor's own `defaultRunOptions.timeoutSecs`, not the
+ * single default-run bug fixed here.
+ */
+const REQUEST_TIMEOUT_MS = 30_000;
 
 /**
  * The real file extension per year, confirmed live from the CKAN dataset's own resource list

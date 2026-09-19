@@ -184,6 +184,41 @@ describe('fetchYearAuctions', () => {
         expect(options.signal).toBeInstanceOf(AbortSignal);
     });
 
+    it('aborts a hung attempt at the tightened ~30s per-attempt timeout (not the old 60s) so the retry loop fits the run\'s real 300s timeoutSecs budget - see the REQUEST_TIMEOUT_MS doc comment\'s worst-case arithmetic', async () => {
+        let callCount = 0;
+        const fetchMock = vi.fn().mockImplementation(async (_url: string, options: { signal: AbortSignal }) => {
+            callCount += 1;
+            if (callCount === 1) {
+                // Simulates a real hung connection: never resolves on its own, only rejects if/when the
+                // AbortController fires - exactly what a genuine `fetch` does on abort.
+                return new Promise((_resolve, reject) => {
+                    options.signal.addEventListener('abort', () => reject(new DOMException('The operation was aborted.', 'AbortError')));
+                });
+            }
+            return Promise.resolve(mockXlsxResponse([['', 45295, 'LTN', 'Venda', '1.ª volta', 45296, 45748, 1_000_000, 0.098997, 0.099024, 680_000, 605_220_929.91, 0, 0, 'LTN 12 meses']]));
+        });
+        vi.stubGlobal('fetch', fetchMock);
+
+        vi.useFakeTimers();
+        const resultPromise = fetchYearAuctions('2026');
+        // eslint-disable-next-line @typescript-eslint/no-empty-function -- suppress unhandled-rejection warning during the advance window; the caller still awaits/asserts on resultPromise itself
+        resultPromise.catch(() => {});
+
+        // Just under the new 30s boundary: the first attempt must still be the only one made - it
+        // has not been aborted yet.
+        await vi.advanceTimersByTimeAsync(29_000);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+
+        // Cross the 30s boundary, then allow the (sub-2s) backoff delay before the retry fires.
+        // Under the OLD 60_000ms timeout this abort would not have fired yet at this point, the
+        // second attempt would never have been made, and this assertion would fail - which is
+        // exactly the regression this test guards against.
+        await vi.advanceTimersByTimeAsync(3_000);
+        const result = await resultPromise;
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+        expect(result!.rows).toHaveLength(1);
+    });
+
     it('throws a descriptive error if the real "Auction Date" English header row cannot be found - a real format-change signal, not a silent misparse', async () => {
         const buffer = XLSX.write(
             (() => {
