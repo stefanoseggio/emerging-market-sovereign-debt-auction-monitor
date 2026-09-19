@@ -1,4 +1,4 @@
-import { Actor } from 'apify';
+import { Actor, log } from 'apify';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type * as DataSourceModule from '../src/dataSource.js';
@@ -13,6 +13,11 @@ vi.mock('apify', () => ({
             pushedRecords.push({ record, eventName });
             return {};
         }),
+        // Not running on the Apify platform in tests - matches real local-dev behavior, under
+        // which routes.ts's time-budget guard (timeBudget.ts) enforces no deadline at all, so it
+        // never affects any of these tests' assertions about which years/rows get processed.
+        isAtHome: vi.fn(() => false),
+        getEnv: vi.fn(() => ({ timeoutAt: null })),
     },
     log: { info: vi.fn(), warning: vi.fn(), error: vi.fn() },
 }));
@@ -62,6 +67,12 @@ afterEach(() => {
     notifiedRecords.length = 0;
     fetchYearAuctions.mockReset();
     vi.mocked(fetch).mockClear();
+    vi.mocked(log.warning).mockClear();
+    // Reset to the real local-dev default (no platform timeout enforced) so a test that
+    // simulates an imminent Apify platform timeout can't leak into any test after it.
+    vi.mocked(Actor.isAtHome).mockReturnValue(false);
+    vi.mocked(Actor.getEnv).mockReturnValue({ timeoutAt: null } as ReturnType<typeof Actor.getEnv>);
+    vi.useRealTimers();
 });
 
 describe('Full auction lifecycle: baseline -> unchanged -> revised -> new -> threshold breach', () => {
@@ -170,6 +181,45 @@ describe('Full auction lifecycle: baseline -> unchanged -> revised -> new -> thr
         expect(stats.totalPushed).toBe(2);
         expect(state.yearCache['2024'].baselineComplete).toBe(true);
         expect(state.yearCache['2025'].baselineComplete).toBe(true);
+    });
+
+    it('stops starting further registry years once this run\'s own real platform timeout is too close to safely attempt another (multi-year time-budget guard - real recurrence fix, 2026-09-19 fleet audit follow-up)', async () => {
+        const state = emptyState();
+        const benchmarkRates: Record<string, number | null> = {};
+
+        // A real Apify run with the Actor's own 300s timeoutSecs, simulated with fake system time
+        // so each mocked year can advance the clock the way a real download+parse would - without
+        // this test actually taking 300 real seconds to run.
+        vi.useFakeTimers();
+        const runStart = new Date('2026-09-19T00:00:00.000Z');
+        vi.setSystemTime(runStart);
+        vi.mocked(Actor.isAtHome).mockReturnValue(true);
+        vi.mocked(Actor.getEnv).mockReturnValue({ timeoutAt: new Date(runStart.getTime() + 300_000) } as ReturnType<typeof Actor.getEnv>);
+
+        fetchYearAuctions.mockImplementation(async (year: string) => {
+            if (year === '2024') {
+                vi.setSystemTime(new Date(Date.now() + 100_000)); // simulates this year taking 100s
+                return { rows: [row()] };
+            }
+            if (year === '2025') {
+                vi.setSystemTime(new Date(Date.now() + 100_000)); // another 100s - 200s elapsed total
+                return { rows: [row({ auctionDateSerial: 45660 })] };
+            }
+            throw new Error(`should never be reached - ${year} should be deferred by the time budget guard`);
+        });
+
+        // By the time 2026 would start, only 85s of this run's real 300s budget remains (285s
+        // deadline after the guard's own safety margin, minus 200s already spent) - less than the
+        // ~94.1s worst case one more year could require, so 2024 and 2025 must still be fully
+        // processed (they were genuinely safe to start), but 2026 must never even be attempted.
+        const stats = await run({ years: ['2024', '2025', '2026'], onlyNew: false } as ActorInput, state, benchmarkRates);
+
+        expect(stats.yearsChecked).toBe(2); // 2024 and 2025 only - 2026 was deferred, not attempted
+        expect(state.yearCache['2024'].baselineComplete).toBe(true);
+        expect(state.yearCache['2025'].baselineComplete).toBe(true);
+        expect(state.yearCache['2026']).toBeUndefined(); // never started, so no state was written for it
+        expect(stats.stopped).toBe(false); // this is a deferral, not the maxItems/eventChargeLimitReached truncation signal
+        expect(vi.mocked(log.warning)).toHaveBeenCalledWith(expect.stringContaining('2026'));
     });
 
     it('a transient failure fetching one year does not abort processing of other, independent years', async () => {
