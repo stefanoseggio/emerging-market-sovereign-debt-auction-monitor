@@ -5,7 +5,7 @@ import { computeEventId, eventNameFor, isHighValueChange, matchesFilters, toOutp
 import type { ActorInput, DeltaState, RawAuctionRow } from '../src/types.js';
 
 vi.mock('apify', () => ({
-    Actor: { pushData: vi.fn(async () => ({})) },
+    Actor: { pushData: vi.fn(async () => ({})), isAtHome: vi.fn(() => false), getEnv: vi.fn(() => ({ timeoutAt: null })) },
     log: { info: vi.fn(), warning: vi.fn(), error: vi.fn() },
 }));
 

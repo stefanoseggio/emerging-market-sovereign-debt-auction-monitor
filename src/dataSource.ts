@@ -12,10 +12,77 @@ const DOWNLOAD_BASE = 'https://sisweb.tesouro.gov.br/apex/cosis/rleiloes/arquivo
 
 const USER_AGENT = 'DeltaRegistrySovereignDebtMonitor/1.0 (+https://apify.com/stefano_seggio/emerging-market-sovereign-debt-auction-monitor)';
 
-const MAX_RETRY_ATTEMPTS = 5;
+/**
+ * REAL RECURRENCE (2026-09-19 fleet audit, follow-up to the fix immediately below this comment in
+ * git history): that earlier fix correctly tightened REQUEST_TIMEOUT_MS from 60_000ms to 30_000ms
+ * so a SINGLE default-input run (`years: ["2026"]`, one file) fit under this Actor's real, live
+ * `defaultRunOptions.timeoutSecs` of 300s. It explicitly left two things unaddressed (see that
+ * commit's own PR body): MAX_RETRY_ATTEMPTS was never reduced, and - more importantly - it
+ * documented but did not fix the fact that a user-selected MULTI-year run (`years` accepts any
+ * subset of 28 enum values, e.g. `["2020","2021","2022","2023","2024"]` for a historical backfill)
+ * calls `fetchWithRetry` once per year, sequentially (routes.ts's `run()`/`processYear()`), so
+ * worst-case time scales linearly with years selected. At the 30_000ms/5-attempt values, that is:
+ *
+ *   per-year worst case = 5 x 30_000ms + 19_500ms = 169_500ms (~169.5s)
+ *   3 years selected     = ~508.5s > 300s timeoutSecs - already broken on a routine 3-year request
+ *
+ * This is a real recurrence of the same class of bug, not a new one: the retry ceiling at this
+ * call site is still oversized relative to what this run can actually afford once more than one
+ * independent unit of work (a year) can be selected in a single run.
+ *
+ * Fix (two parts, because the per-call tightening alone cannot make an arbitrarily-large `years`
+ * selection safe - see the arithmetic below):
+ *
+ * 1. Tighten further here: REQUEST_TIMEOUT_MS 30_000ms -> 20_000ms and MAX_RETRY_ATTEMPTS 5 -> 4.
+ *    Dropping a retry (not just the per-attempt timeout) is deliberate this time: this source's
+ *    files are small (58-85 KB) and normally transfer in a few seconds even over a slow,
+ *    high-latency government connection, so a genuinely healthy-but-flaky connection does not need
+ *    5 full attempts to recover from a transient 5xx/429/network error - 4 is still a real retry
+ *    budget, not a bare-minimum "try twice" compromise.
+ *
+ *      new worst case (this file alone) = MAX_RETRY_ATTEMPTS x REQUEST_TIMEOUT_MS + backoff
+ *        backoff (3 inter-attempt gaps, each at its full 30% jitter ceiling - see backoffDelay()):
+ *          attempt 1: min(1_000 x 2^0, 30_000) x 1.3 = 1_300ms
+ *          attempt 2: min(1_000 x 2^1, 30_000) x 1.3 = 2_600ms
+ *          attempt 3: min(1_000 x 2^2, 30_000) x 1.3 = 5_200ms
+ *          sum = 9_100ms
+ *        = 4 x 20_000ms + 9_100ms = 80_000ms + 9_100ms = 89_100ms (~89.1s per year)
+ *        = ~29.7% of the real 300s timeoutSecs budget for a SINGLE year (see FETCH_WORST_CASE_MS
+ *          below, computed from these same constants so this comment cannot silently drift from
+ *          the code).
+ *
+ * 2. Add a per-run cumulative time-budget guard in routes.ts (see timeBudget.ts), the same
+ *    Actor.getEnv().timeoutAt-based pattern this fleet already uses elsewhere
+ *    (kipris-patent-trademark-status-monitor), rather than an arbitrary hard cap on how many years
+ *    can be selected. Even at 89.1s/year worst case, a legitimate historical-backfill request
+ *    (e.g. 5+ years in one run) still would not fit if every single year genuinely hit its full
+ *    worst case - but real runs essentially never do (this source is small and normally fast), so
+ *    a hard cap would break a real, intended use case (this Actor's own docs describe multi-year
+ *    backfills as normal) to guard against a scenario the budget guard already handles: it checks
+ *    real remaining run time before STARTING each additional year and safely defers any it cannot
+ *    afford to a future run, instead of letting them run the platform's own kill signal head-on.
+ */
+const MAX_RETRY_ATTEMPTS = 4;
 const BASE_BACKOFF_MS = 1000;
 const MAX_BACKOFF_MS = 30_000;
-const REQUEST_TIMEOUT_MS = 60_000;
+const REQUEST_TIMEOUT_MS = 20_000;
+
+/** Worst-case backoff delay before retry attempt `attemptIndex + 1` - the same formula as `backoffDelay()` but pinned to its full jitter ceiling (a fixed upper bound), not a live random draw, because this feeds a worst-case time budget rather than an actual sleep. */
+function maxBackoffMs(attemptIndex: number): number {
+    const exponential = Math.min(BASE_BACKOFF_MS * 2 ** attemptIndex, MAX_BACKOFF_MS);
+    return exponential * 1.3;
+}
+
+/**
+ * The absolute worst-case wall-clock time one `fetchWithRetry` call (i.e. one registry year) can
+ * take: every attempt stalls for the full REQUEST_TIMEOUT_MS before being aborted, and every
+ * inter-attempt backoff hits its full jitter ceiling. Exported so routes.ts's per-run time-budget
+ * guard (timeBudget.ts) knows how much of this run's real remaining time one more year requires
+ * before it is safe to start it - see part 2 of the fix above.
+ */
+export const FETCH_WORST_CASE_MS =
+    MAX_RETRY_ATTEMPTS * REQUEST_TIMEOUT_MS +
+    Array.from({ length: MAX_RETRY_ATTEMPTS - 1 }, (_unused, i) => maxBackoffMs(i)).reduce((sum, ms) => sum + ms, 0);
 
 /**
  * The real file extension per year, confirmed live from the CKAN dataset's own resource list

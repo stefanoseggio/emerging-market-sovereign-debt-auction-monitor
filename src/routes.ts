@@ -2,12 +2,24 @@ import { createHash } from 'node:crypto';
 
 import { Actor, log } from 'apify';
 
-import { fetchYearAuctions } from './dataSource.js';
+import { FETCH_WORST_CASE_MS, fetchYearAuctions } from './dataSource.js';
 import { benchmarkRateKey, classify, normalizeAuction, shouldDeliver, toStoredFingerprint } from './deltaEngine.js';
 import { notifyAllChannels } from './notifier.js';
 import { recordSeen, recordYearChecked } from './state.js';
+import { budgetExceededFor, getRunBudget } from './timeBudget.js';
 import type { ActorInput, ClassifiedEvent, DeltaState, NormalizedAuction, OutputRecord, RawAuctionRow, RegistryYear } from './types.js';
 import { DEFAULT_YEAR } from './types.js';
+
+/**
+ * How much of this run's real remaining time budget one more registry year requires before it is
+ * safe to start it (see timeBudget.ts and dataSource.ts's FETCH_WORST_CASE_MS doc comments for the
+ * full "REAL RECURRENCE" writeup this guards against): the worst-case download+retry time for one
+ * year, plus a fixed buffer for XLSX parsing and row processing on top of it. This source's files
+ * are small (58-85 KB - see fetchYearAuctions's doc comment), so parsing a whole year is normally
+ * well under a second; this buffer is deliberately generous relative to that observed reality.
+ */
+const YEAR_PARSE_BUFFER_MS = 5_000;
+const YEAR_WORST_CASE_MS = FETCH_WORST_CASE_MS + YEAR_PARSE_BUFFER_MS;
 
 const EVENT_NEW_AUCTION = 'new-auction';
 const EVENT_AUCTION_REVISED = 'auction-result-revised';
@@ -222,9 +234,28 @@ export async function run(input: ActorInput, state: DeltaState, benchmarkRates: 
     const scrapedAt = new Date().toISOString();
     const stats: RunStats = { totalPushed: 0, stopped: false, yearsChecked: 0, byEventType: {} };
     const years = input.years && input.years.length > 0 ? input.years : [DEFAULT_YEAR];
+    // Snapshotted once per run, not re-read per year - it is this run's own fixed deadline (see
+    // timeBudget.ts).
+    const budget = getRunBudget();
 
     for (const year of years) {
         if (stats.stopped) break;
+        // Multi-year runs call fetchYearAuctions once per year, sequentially - each call's own
+        // worst case is real (see FETCH_WORST_CASE_MS), so a `years` selection large enough (or
+        // unlucky enough) can still exceed this run's real platform timeout even after the
+        // per-call tightening in dataSource.ts. Rather than starting a year this run cannot
+        // safely finish, defer it (and any still-unattempted years after it) to a future run -
+        // no state is lost: every year already processed this run has already been recorded via
+        // recordYearChecked/recordSeen below, and this deliberately does NOT set `stats.stopped`,
+        // which has a different, narrower meaning (an in-progress year truncated by
+        // maxItems/eventChargeLimitReached - see processYear's own comment) than simply never
+        // having started a later year at all.
+        if (budgetExceededFor(budget, YEAR_WORST_CASE_MS)) {
+            log.warning(
+                `Stopping before registry year ${year}: not enough of this run's own real timeout budget remains to safely start another year (worst case ~${Math.round(YEAR_WORST_CASE_MS / 1000)}s for one year's download, retries, and parsing). This and any remaining selected years will be attempted on a future run - no data or state already recorded this run is lost.`,
+            );
+            break;
+        }
         await processYear(year, state, benchmarkRates, input, scrapedAt, stats);
     }
 
