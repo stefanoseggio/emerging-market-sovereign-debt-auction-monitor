@@ -252,3 +252,53 @@ any positive integer serial; any two positive quantities) — exactly the case p
 testing is suited for, rather than a handful of hand-picked examples. This actor uses `fast-check`
 (the standard TypeScript/JavaScript property-based testing library, integrating directly with
 Vitest) for `test/quantEngine.test.ts`'s numeric-precision tests, not renamed unit tests.
+
+## 7. HTTP transport: `impit`, not the native `fetch`
+
+`src/dataSource.ts` makes its one real request (the per-year XLSX download) via a module-level
+`Impit` instance (`new Impit({ browser: 'chrome' })`, from the `impit` package), not the global
+`fetch`. This gives that request a real, internally-consistent Chrome TLS/HTTP2 fingerprint
+instead of Node's native (and distinctively bot-shaped) one — added 2026-09-19 as a fleet-wide
+TLS-fingerprint-hardening pilot (Node's own `fetch` is not itself deprecated; this is proactive
+hardening, not a bug fix). `src/notifier.ts`'s webhook POSTs (Slack/Teams/user-supplied
+`webhookUrl`) deliberately still use the native `fetch` — those calls go to the caller's own
+integration endpoints, not a scraped source, so a browser TLS fingerprint buys nothing there.
+
+Two things to know if you touch this again:
+
+- **`Impit.fetch()` is a native binding, not built on the global `fetch`.**
+  `vi.stubGlobal('fetch', ...)` does NOT intercept it — it silently does nothing and the real
+  network call goes out. `test/dataSource.test.ts` originally mocked global `fetch` this way (12
+  call sites); every one of those tests would have started hitting the live Tesouro Transparente
+  file server had this not been caught before merge. Fixed by mocking the `impit` module itself
+  instead (`vi.mock('impit', ...)`, with `vi.hoisted()` for the mock function reference, and a real
+  `function` — not an arrow function — as the mock's `Impit` implementation, since `new Impit(...)`
+  requires a constructible mock). Keep that pattern if this file's tests are extended.
+- **`vi.restoreAllMocks()` does not reliably clear a plain `vi.fn()` created via `vi.hoisted()`** —
+  it only reliably restores real `vi.spyOn()` spies. Without an explicit `fetchMock.mockReset()` in
+  `afterEach`, `fetchMock.mock.calls` leaked across tests within the same file (observed live: a
+  test asserting 2 calls saw 8, then 12, then 14 — call counts accumulating test-to-test), which
+  would have made every `toHaveBeenCalledTimes(...)` assertion in this suite meaningless. This is a
+  real gotcha beyond the one already documented in `florida-tenders-monitor/AGENTS.md` for the same
+  migration — check for it if you extend this pattern elsewhere in this fleet.
+- This file has no `init: RequestInit` parameter and no `: Response`-typed signature anywhere, so
+  neither of `impit`'s other two common migration gotchas (the narrower `HttpMethod` union on
+  `RequestInit.method`, and `ImpitResponse` not being structurally assignable to the DOM `Response`)
+  applied here.
+
+**Site-specific finding**: live-tested directly against the real
+`sisweb.tesouro.gov.br` file server on 2026-09-19 (native `fetch()` and `impit.fetch({browser:
+'chrome'})` run concurrently against the same 2026 file) — both returned `200 OK` with
+byte-identical content (59,433 bytes) and comparable latency. Unlike `diario-oficial-cl-monitor`
+(where this same `impit` swap got the Chrome fingerprint actively blocked by that site's WAF), this
+Oracle-APEX/IIS-fronted government server shows no fingerprint-based discrimination. `fetchYearAuctions('2026')`
+was also re-run end-to-end against the live site through `impit` after the swap and correctly
+parsed all 728 real rows.
+
+Note for whoever adds real live-tagged tests to this repo: `.github/workflows/test.yaml`'s
+`live-smoke-test` job already runs `CI= npm test` expecting `describe.skipIf(process.env.CI)`-gated
+live tests to un-skip, but none currently exist anywhere in `test/` — that job is presently a
+no-op duplicate of the regular unit-test run. Live verification for this change was therefore done
+manually (see above), not via that CI job. Adding real live tests (following the
+`florida-tenders-monitor`/`australia-grantconnect-monitor` `test/live.test.ts` convention) is real,
+pre-existing follow-up work, out of scope for this transport-only change.
