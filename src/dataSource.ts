@@ -1,7 +1,14 @@
 import { log } from 'apify';
+import { Impit } from 'impit';
 import * as XLSX from 'xlsx';
 
 import type { RawAuctionRow, RegistryYear } from './types.js';
+
+// One Impit instance per actor run: it holds the connection pool and TLS
+// session cache, and gives every request a real, internally-consistent
+// Chrome TLS/HTTP2 fingerprint instead of Node's native (and distinctively
+// bot-shaped) one - see AGENTS.md for why this was added.
+const impit = new Impit({ browser: 'chrome' });
 
 /**
  * Brazil's National Treasury real, official per-year bulk auction-results file - confirmed live
@@ -144,7 +151,7 @@ async function fetchWithRetry(url: string): Promise<FetchedResponse> {
         const timeoutController = new AbortController();
         const timeoutHandle = setTimeout(() => timeoutController.abort(), REQUEST_TIMEOUT_MS);
         try {
-            const response = await fetch(url, { method: 'GET', headers: { 'User-Agent': USER_AGENT }, signal: timeoutController.signal });
+            const response = await impit.fetch(url, { method: 'GET', headers: { 'User-Agent': USER_AGENT }, signal: timeoutController.signal });
             if (response.status === 404) return { status: 404, buffer: null }; // a not-yet-published year - not transient, caller decides
             if (!response.ok) {
                 if (response.status >= 500 || response.status === 429) {

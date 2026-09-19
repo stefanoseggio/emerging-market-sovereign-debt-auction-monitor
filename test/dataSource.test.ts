@@ -3,6 +3,23 @@ import * as XLSX from 'xlsx';
 
 import { excelSerialToIsoDate, FETCH_WORST_CASE_MS, fetchYearAuctions } from '../src/dataSource.js';
 
+// impit's Impit.fetch() is a native binding, not built on the global `fetch` -
+// vi.stubGlobal('fetch', ...) never intercepts it. Mock the `impit` module
+// itself instead, so `new Impit()` in src/dataSource.ts returns an object whose
+// `.fetch` is this mock. vi.hoisted() is required because vi.mock() factories
+// run before the top-level `const` below would otherwise be initialized.
+const { fetchMock } = vi.hoisted(() => ({
+    fetchMock: vi.fn<(url: string, init: RequestInit) => Promise<Response>>(),
+}));
+vi.mock('impit', () => ({
+    // Must be a real `function`, not an arrow function - `new Impit(...)` in
+    // src/dataSource.ts requires a constructible mock implementation.
+    // eslint-disable-next-line prefer-arrow-callback -- a `new`-able mock cannot be an arrow function
+    Impit: vi.fn().mockImplementation(function ImpitMock() {
+        return { fetch: fetchMock };
+    }),
+}));
+
 /** Builds a real, valid XLSX buffer matching the source's confirmed live layout: title rows 0-4, Portuguese header row 5, English header row 6, data from row 7. */
 function buildRealShapedWorkbook(dataRows: unknown[][]): ArrayBuffer {
     const rows: unknown[][] = [
@@ -21,18 +38,25 @@ function buildRealShapedWorkbook(dataRows: unknown[][]): ArrayBuffer {
     return XLSX.write(workbook, { type: 'array', bookType: 'xlsx' });
 }
 
-function mockXlsxResponse(dataRows: unknown[][], overrides: Partial<{ ok: boolean; status: number }> = {}) {
+// Returns a minimal fetch-response-shaped object, not a real `Response` - cast at the boundary
+// (same pattern as mendoza-compras-monitor's fakeResponse()) since fetchMock's declared type
+// mirrors the real `impit.fetch()` signature but this suite only needs the handful of fields
+// fetchYearAuctions() actually reads.
+function mockXlsxResponse(dataRows: unknown[][], overrides: Partial<{ ok: boolean; status: number }> = {}): Response {
     const buffer = buildRealShapedWorkbook(dataRows);
     return {
         ok: overrides.ok ?? true,
         status: overrides.status ?? 200,
         headers: { get: () => null },
         arrayBuffer: async () => buffer,
-    };
+    } as unknown as Response;
 }
 
 afterEach(() => {
-    vi.unstubAllGlobals();
+    // vi.restoreAllMocks() does not reliably clear a plain vi.fn() created via vi.hoisted() (it
+    // only reliably restores real vi.spyOn() spies) - fetchMock.mock.calls would otherwise leak
+    // across tests, exactly the same fix already applied in florida-tenders-monitor/test/http.test.ts.
+    fetchMock.mockReset();
     vi.restoreAllMocks();
     vi.useRealTimers();
 });
@@ -71,10 +95,9 @@ describe('excelSerialToIsoDate', () => {
 
 describe('fetchYearAuctions', () => {
     it('parses a real-shaped workbook, finding the header row by content rather than a hardcoded index', async () => {
-        const fetchMock = vi.fn().mockResolvedValue(
+        fetchMock.mockResolvedValue(
             mockXlsxResponse([['', 45295, 'LTN', 'Venda', '1.ª volta', 45296, 45748, 1_000_000, 0.098997, 0.099024, 680_000, 605_220_929.91, 0, 0, 'LTN 12 meses']]),
         );
-        vi.stubGlobal('fetch', fetchMock);
 
         const result = await fetchYearAuctions('2026');
         expect(result).not.toBeNull();
@@ -86,10 +109,9 @@ describe('fetchYearAuctions', () => {
     });
 
     it('handles a row with a missing benchmark (real, confirmed live: a 2nd-round row often has none)', async () => {
-        const fetchMock = vi.fn().mockResolvedValue(
+        fetchMock.mockResolvedValue(
             mockXlsxResponse([['', 45295, 'LTN', 'Venda', '2.ª volta', 45299, 45748, 250_000, 0.098997, 0.098997, 0, 0, 0, 0, '']]),
         );
-        vi.stubGlobal('fetch', fetchMock);
 
         const result = await fetchYearAuctions('2026');
         expect(result!.rows[0].benchmark).toBeNull();
@@ -102,7 +124,7 @@ describe('fetchYearAuctions', () => {
         // interior case specifically so the test name matches what the code actually does,
         // corrected after adversarial review flagged an earlier version's name/fixture as only
         // covering trailing blanks (indistinguishable from a true stop-at-first-blank behavior).
-        const fetchMock = vi.fn().mockResolvedValue(
+        fetchMock.mockResolvedValue(
             mockXlsxResponse([
                 ['', 45295, 'LTN', 'Venda', '1.ª volta', 45296, 45748, 1_000_000, 0.098997, 0.099024, 680_000, 605_220_929.91, 0, 0, 'LTN 12 meses'],
                 [''], // interior blank row
@@ -111,7 +133,6 @@ describe('fetchYearAuctions', () => {
                 [''],
             ]),
         );
-        vi.stubGlobal('fetch', fetchMock);
 
         const result = await fetchYearAuctions('2026');
         expect(result!.rows).toHaveLength(2); // both valid rows kept, not truncated at the interior blank
@@ -119,8 +140,7 @@ describe('fetchYearAuctions', () => {
     });
 
     it('returns null (not an error) on a real 404 - a not-yet-published year', async () => {
-        const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 404, headers: { get: () => null }, arrayBuffer: async () => new ArrayBuffer(0) });
-        vi.stubGlobal('fetch', fetchMock);
+        fetchMock.mockResolvedValue({ ok: false, status: 404, headers: { get: () => null }, arrayBuffer: async () => new ArrayBuffer(0) } as unknown as Response);
 
         const result = await fetchYearAuctions('2027');
         expect(result).toBeNull();
@@ -128,8 +148,7 @@ describe('fetchYearAuctions', () => {
     });
 
     it('builds the correct real URL and file extension for a year in the confirmed .xls range (2011-2019)', async () => {
-        const fetchMock = vi.fn().mockResolvedValue(mockXlsxResponse([]));
-        vi.stubGlobal('fetch', fetchMock);
+        fetchMock.mockResolvedValue(mockXlsxResponse([]));
 
         await fetchYearAuctions('2015');
         const [url] = fetchMock.mock.calls[0];
@@ -138,8 +157,7 @@ describe('fetchYearAuctions', () => {
     });
 
     it('builds the correct real URL and file extension for a year in the confirmed .xlsx range (2020+)', async () => {
-        const fetchMock = vi.fn().mockResolvedValue(mockXlsxResponse([]));
-        vi.stubGlobal('fetch', fetchMock);
+        fetchMock.mockResolvedValue(mockXlsxResponse([]));
 
         await fetchYearAuctions('2026');
         const [url] = fetchMock.mock.calls[0];
@@ -147,11 +165,9 @@ describe('fetchYearAuctions', () => {
     });
 
     it('retries on a 5xx response and succeeds once the server recovers', async () => {
-        const fetchMock = vi
-            .fn()
-            .mockResolvedValueOnce({ ok: false, status: 503, headers: { get: () => null }, arrayBuffer: async () => new ArrayBuffer(0) })
+        fetchMock
+            .mockResolvedValueOnce({ ok: false, status: 503, headers: { get: () => null }, arrayBuffer: async () => new ArrayBuffer(0) } as unknown as Response)
             .mockResolvedValueOnce(mockXlsxResponse([['', 45295, 'LTN', 'Venda', '1.ª volta', 45296, 45748, 1_000_000, 0.098997, 0.099024, 680_000, 605_220_929.91, 0, 0, 'LTN 12 meses']]));
-        vi.stubGlobal('fetch', fetchMock);
 
         const result = await withFakeRetryTimers(async () => fetchYearAuctions('2026'));
         expect(result!.rows).toHaveLength(1);
@@ -159,19 +175,16 @@ describe('fetchYearAuctions', () => {
     });
 
     it('gives up and throws after exhausting all retry attempts against a persistent 500', async () => {
-        const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 500, headers: { get: () => null }, arrayBuffer: async () => new ArrayBuffer(0) });
-        vi.stubGlobal('fetch', fetchMock);
+        fetchMock.mockResolvedValue({ ok: false, status: 500, headers: { get: () => null }, arrayBuffer: async () => new ArrayBuffer(0) } as unknown as Response);
 
         await expect(withFakeRetryTimers(async () => fetchYearAuctions('2026'))).rejects.toThrow(/500/);
         expect(fetchMock).toHaveBeenCalledTimes(4); // MAX_RETRY_ATTEMPTS
     });
 
     it('retries on a genuine network-level failure (a rejected fetch, e.g. DNS failure or connection reset), not just a resolved bad-status response', async () => {
-        const fetchMock = vi
-            .fn()
+        fetchMock
             .mockRejectedValueOnce(new TypeError('fetch failed: ECONNRESET'))
             .mockResolvedValueOnce(mockXlsxResponse([['', 45295, 'LTN', 'Venda', '1.ª volta', 45296, 45748, 1_000_000, 0.098997, 0.099024, 680_000, 605_220_929.91, 0, 0, 'LTN 12 meses']]));
-        vi.stubGlobal('fetch', fetchMock);
 
         const result = await withFakeRetryTimers(async () => fetchYearAuctions('2026'));
         expect(result!.rows).toHaveLength(1);
@@ -179,16 +192,14 @@ describe('fetchYearAuctions', () => {
     });
 
     it('does not retry a non-retryable 4xx (e.g. 403) - fails immediately without wasting the retry budget on a permission error', async () => {
-        const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 403, headers: { get: () => null }, arrayBuffer: async () => new ArrayBuffer(0) });
-        vi.stubGlobal('fetch', fetchMock);
+        fetchMock.mockResolvedValue({ ok: false, status: 403, headers: { get: () => null }, arrayBuffer: async () => new ArrayBuffer(0) } as unknown as Response);
 
         await expect(fetchYearAuctions('2026')).rejects.toThrow(/403/);
         expect(fetchMock).toHaveBeenCalledTimes(1);
     });
 
     it('passes an AbortController signal so a hung request against a high-latency government server can be aborted', async () => {
-        const fetchMock = vi.fn().mockResolvedValue(mockXlsxResponse([]));
-        vi.stubGlobal('fetch', fetchMock);
+        fetchMock.mockResolvedValue(mockXlsxResponse([]));
 
         await fetchYearAuctions('2026');
         const [, options] = fetchMock.mock.calls[0];
@@ -197,18 +208,19 @@ describe('fetchYearAuctions', () => {
 
     it('aborts a hung attempt at the tightened ~20s per-attempt timeout (not the old 30s/60s) so the retry loop fits the run\'s real 300s timeoutSecs budget even across a multi-year run - see the REQUEST_TIMEOUT_MS doc comment\'s worst-case arithmetic', async () => {
         let callCount = 0;
-        const fetchMock = vi.fn().mockImplementation(async (_url: string, options: { signal: AbortSignal }) => {
+        fetchMock.mockImplementation(async (_url: string, init: RequestInit) => {
             callCount += 1;
             if (callCount === 1) {
                 // Simulates a real hung connection: never resolves on its own, only rejects if/when the
-                // AbortController fires - exactly what a genuine `fetch` does on abort.
+                // AbortController fires - exactly what a genuine `fetch` does on abort. init.signal is
+                // always real here - fetchYearAuctions() always passes one - non-null assertion is fine
+                // (test files have @typescript-eslint/no-non-null-assertion turned off).
                 return new Promise((_resolve, reject) => {
-                    options.signal.addEventListener('abort', () => reject(new DOMException('The operation was aborted.', 'AbortError')));
+                    init.signal!.addEventListener('abort', () => reject(new DOMException('The operation was aborted.', 'AbortError')));
                 });
             }
             return Promise.resolve(mockXlsxResponse([['', 45295, 'LTN', 'Venda', '1.ª volta', 45296, 45748, 1_000_000, 0.098997, 0.099024, 680_000, 605_220_929.91, 0, 0, 'LTN 12 meses']]));
         });
-        vi.stubGlobal('fetch', fetchMock);
 
         vi.useFakeTimers();
         const resultPromise = fetchYearAuctions('2026');
@@ -239,8 +251,7 @@ describe('fetchYearAuctions', () => {
             })(),
             { type: 'array', bookType: 'xlsx' },
         );
-        const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, headers: { get: () => null }, arrayBuffer: async () => buffer });
-        vi.stubGlobal('fetch', fetchMock);
+        fetchMock.mockResolvedValue({ ok: true, status: 200, headers: { get: () => null }, arrayBuffer: async () => buffer } as unknown as Response);
 
         await expect(fetchYearAuctions('2026')).rejects.toThrow(/Auction Date/);
     });

@@ -8,6 +8,7 @@
     },
     "dependencies": {
         "apify": "^3.7.0",
+        "impit": "^0.14.5",
         "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
     },
     "devDependencies": {
