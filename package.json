@@ -7,7 +7,7 @@
         "node": ">=20.0.0"
     },
     "dependencies": {
-        "apify": "^3.7.0",
+        "apify": "^3.8.0",
         "impit": "^0.14.8",
         "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
     },
